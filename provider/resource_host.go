@@ -201,6 +201,10 @@ var hostSchemaBase = map[string]*schema.Schema{
 		Type:        schema.TypeString,
 		Description: "ID of proxy to monitor this host",
 	},
+	"monitored_by": &schema.Schema{
+		Type:        schema.TypeString,
+		Description: "1 if monitored by proxy, else 0",
+	},
 	"enabled": &schema.Schema{
 		Type:        schema.TypeBool,
 		Optional:    true,
@@ -400,9 +404,9 @@ func hostResourceSchema(m map[string]*schema.Schema) (o map[string]*schema.Schem
 
 		// required
 		switch k {
-		case "host", "interface", "groups":
+		case "host", "groups":
 			schema.Required = true
-		case "templates", "proxyid", "inventory":
+		case "templates", "proxyid", "interface", "inventory", "monitored_by":
 			schema.Optional = true
 		}
 
@@ -411,6 +415,7 @@ func hostResourceSchema(m map[string]*schema.Schema) (o map[string]*schema.Schem
 
 	o["proxyid"].ValidateFunc = validation.StringIsNotWhiteSpace
 	o["proxyid"].Default = "0"
+	o["monitored_by"].Default = "1"
 	return o
 }
 
@@ -425,7 +430,7 @@ func hostDataSchema(m map[string]*schema.Schema) (o map[string]*schema.Schema) {
 		case "host", "templates":
 			schema.Optional = true
 			fallthrough
-		case "interface", "groups", "macro", "proxyid", "inventory":
+		case "interface", "groups", "macro", "proxyid", "monitored_by", "inventory":
 			schema.Computed = true
 		}
 
@@ -541,14 +546,20 @@ func hostGenerateInventory(d *schema.ResourceData) (zabbix.Inventory, error) {
 
 // buildHostObject create host struct
 func buildHostObject(d *schema.ResourceData, m interface{}) (*zabbix.Host, error) {
+	api := m.(*zabbix.API)
+	proxyId := d.Get("proxyid").(string)
 	item := zabbix.Host{
 		Host:          d.Get("host").(string),
 		Name:          d.Get("name").(string),
-		ProxyID:       d.Get("proxyid").(string),
+		MonitoredBy:   d.Get("monitored_by").(string),
 		InventoryMode: HINV_LOOKUP[d.Get("inventory_mode").(string)],
 		Status:        0,
 	}
-
+	if api.Config.Version < 70000 {
+		item.ProxyHostID = proxyId
+	} else {
+		item.ProxyID = proxyId
+	}
 	if !d.Get("enabled").(bool) {
 		item.Status = 1
 	}
@@ -635,17 +646,31 @@ func dataHostRead(d *schema.ResourceData, m interface{}) error {
 
 // resourceHostRead read handler for resource
 func resourceHostRead(d *schema.ResourceData, m interface{}) error {
+	api := m.(*zabbix.API)
 	log.Debug("Lookup of hostgroup with id %s", d.Id())
 
-	return hostRead(d, m, zabbix.Params{
-		"selectInterfaces":      "extend",
-		"selectParentTemplates": "extend",
-		"selectGroups":          "extend",
-		"selectMacros":          "extend",
-		"selectTags":            "extend",
-		"selectInventory":       "extend",
-		"hostids":               d.Id(),
-	})
+	if api.Config.Version < 70000 {
+		return hostRead(d, m, zabbix.Params{
+			"selectInterfaces":      "extend",
+			"selectParentTemplates": "extend",
+			"selectGroups":          "extend",
+			"selectMacros":          "extend",
+			"selectTags":            "extend",
+			"selectInventory":       "extend",
+			"hostids":               d.Id(),
+		})
+	} else {
+		return hostRead(d, m, zabbix.Params{
+			"selectInterfaces":      "extend",
+			"selectParentTemplates": "extend",
+			"selectHostGroups":      "extend",
+			"selectMacros":          "extend",
+			"selectTags":            "extend",
+			"selectInventory":       "extend",
+			"hostids":               d.Id(),
+		})
+	}
+
 }
 
 // hostRead common host read function
@@ -674,14 +699,22 @@ func hostRead(d *schema.ResourceData, m interface{}, params zabbix.Params) error
 	d.SetId(host.HostID)
 	d.Set("name", host.Name)
 	d.Set("host", host.Host)
-	d.Set("proxyid", host.ProxyID)
+	d.Set("monitored_by", host.MonitoredBy)
 	d.Set("enabled", host.Status == 0)
 	d.Set("inventory_mode", HINV_LOOKUP_REV[host.InventoryMode])
-
+	if api.Config.Version < 70000 {
+		d.Set("proxyid", host.ProxyHostID)
+	} else {
+		d.Set("proxyid", host.ProxyID)
+	}
 	d.Set("interface", flattenHostInterfaces(host, d, m))
 	d.Set("templates", flattenTemplateIds(host.ParentTemplateIDs))
 	d.Set("inventory", flattenInventory(host))
-	d.Set("groups", flattenHostGroupIds(host.GroupIds))
+	if api.Config.Version < 70000 {
+		d.Set("groups", flattenHostGroupIds(host.GroupIds))
+	} else {
+		d.Set("groups", flattenHostGroupIds(host.HostGroupIds))
+	}
 	d.Set("macro", flattenMacros(host.UserMacros))
 	d.Set("tag", flattenTags(host.Tags))
 

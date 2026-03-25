@@ -224,6 +224,7 @@ func httpFlattenHeaders(headers zabbix.HttpHeaders) (ret map[string]interface{})
 
 // http item modify custom function
 func itemHttpModFunc(d *schema.ResourceData, m interface{}, item *zabbix.Item) {
+	api := m.(*zabbix.API)
 	item.InterfaceID = d.Get("interfaceid").(string)
 	item.Url = d.Get("url").(string)
 	item.Delay = d.Get("delay").(string)
@@ -254,8 +255,14 @@ func itemHttpModFunc(d *schema.ResourceData, m interface{}, item *zabbix.Item) {
 		item.FollowRedirects = "0"
 	}
 	item.Headers = httpGenerateHeaders(d)
+
+	// For Zabbix 7+, HTTP items don't accept hostid parameter
+	if api.Config.Version >= 70000 {
+		item.HostID = ""
+	}
 }
 func lldHttpModFunc(d *schema.ResourceData, m interface{}, item *zabbix.LLDRule) {
+	api := m.(*zabbix.API)
 	item.InterfaceID = d.Get("interfaceid").(string)
 	item.Url = d.Get("url").(string)
 	item.RequestMethod = HTTP_METHODS[d.Get("request_method").(string)]
@@ -285,6 +292,11 @@ func lldHttpModFunc(d *schema.ResourceData, m interface{}, item *zabbix.LLDRule)
 		item.FollowRedirects = "0"
 	}
 	item.Headers = httpGenerateHeaders(d)
+
+	// For Zabbix 7+, HTTP LLD rules don't accept hostid parameter
+	if api.Config.Version >= 70000 {
+		item.HostID = ""
+	}
 }
 
 // http item read custom function

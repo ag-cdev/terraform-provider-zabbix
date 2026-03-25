@@ -413,8 +413,7 @@ func hostResourceSchema(m map[string]*schema.Schema) (o map[string]*schema.Schem
 		o[k] = &schema
 	}
 
-	o["proxyid"].ValidateFunc = validation.StringIsNotWhiteSpace
-	o["proxyid"].Default = "0"
+	o["proxyid"].Computed = true
 	o["monitored_by"].Default = "1"
 	return o
 }
@@ -555,10 +554,17 @@ func buildHostObject(d *schema.ResourceData, m interface{}) (*zabbix.Host, error
 		InventoryMode: HINV_LOOKUP[d.Get("inventory_mode").(string)],
 		Status:        0,
 	}
-	if api.Config.Version < 70000 {
-		item.ProxyHostID = proxyId
+	if api.Config.Version >= 70000 {
+		if proxyId != "" && proxyId != "0" {
+			item.ProxyID = proxyId
+			item.MonitoredBy = "1"
+		} else {
+			item.MonitoredBy = "0"
+		}
 	} else {
-		item.ProxyID = proxyId
+		if proxyId != "" && proxyId != "0" {
+			item.ProxyID = proxyId
+		}
 	}
 	if !d.Get("enabled").(bool) {
 		item.Status = 1
@@ -702,19 +708,11 @@ func hostRead(d *schema.ResourceData, m interface{}, params zabbix.Params) error
 	d.Set("monitored_by", host.MonitoredBy)
 	d.Set("enabled", host.Status == 0)
 	d.Set("inventory_mode", HINV_LOOKUP_REV[host.InventoryMode])
-	if api.Config.Version < 70000 {
-		d.Set("proxyid", host.ProxyHostID)
-	} else {
-		d.Set("proxyid", host.ProxyID)
-	}
+	d.Set("proxyid", host.ProxyID)
 	d.Set("interface", flattenHostInterfaces(host, d, m))
 	d.Set("templates", flattenTemplateIds(host.ParentTemplateIDs))
 	d.Set("inventory", flattenInventory(host))
-	if api.Config.Version < 70000 {
-		d.Set("groups", flattenHostGroupIds(host.GroupIds))
-	} else {
-		d.Set("groups", flattenHostGroupIds(host.HostGroupIds))
-	}
+	d.Set("groups", flattenHostGroupIds(host.GroupIds))
 	d.Set("macro", flattenMacros(host.UserMacros))
 	d.Set("tag", flattenTags(host.Tags))
 

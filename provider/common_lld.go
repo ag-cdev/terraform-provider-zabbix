@@ -235,7 +235,7 @@ func lldGetReadWrapper(r LLDHandler) schema.ReadFunc {
 func resourceLLDCreate(d *schema.ResourceData, m interface{}, c LLDHandler, r LLDHandler) error {
 	api := m.(*zabbix.API)
 
-	lld := buildLLDObject(d)
+	lld := buildLLDObject(d, api)
 
 	// run custom function
 	c(d, m, lld)
@@ -261,7 +261,7 @@ func resourceLLDCreate(d *schema.ResourceData, m interface{}, c LLDHandler, r LL
 func resourceLLDUpdate(d *schema.ResourceData, m interface{}, c LLDHandler, r LLDHandler) error {
 	api := m.(*zabbix.API)
 
-	lld := buildLLDObject(d)
+	lld := buildLLDObject(d, api)
 	lld.ItemID = d.Id()
 
 	// run custom function
@@ -327,13 +327,18 @@ func resourceLLDRead(d *schema.ResourceData, m interface{}, r LLDHandler) error 
 }
 
 // Build the base lld Object
-func buildLLDObject(d *schema.ResourceData) *zabbix.LLDRule {
+func buildLLDObject(d *schema.ResourceData, api *zabbix.API) *zabbix.LLDRule {
 	lld := zabbix.LLDRule{
 		Key:      d.Get("key").(string),
-		HostID:   d.Get("hostid").(string),
 		Name:     d.Get("name").(string),
 		Delay:    d.Get("delay").(string),
 		LifeTime: d.Get("lifetime").(string),
+	}
+
+	// For Zabbix 7+, hostid is only needed for LLD rule CREATE (not UPDATE)
+	// For older versions, hostid is always needed
+	if api.Config.Version < 70000 || d.Id() == "" {
+		lld.HostID = d.Get("hostid").(string)
 	}
 
 	lld.Preprocessors = lldGeneratePreprocessors(d)

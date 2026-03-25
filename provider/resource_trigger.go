@@ -124,6 +124,117 @@ var schemaTrigger = map[string]*schema.Schema{
 			},
 		},
 	},
+	"proxyid": &schema.Schema{
+		Type:        schema.TypeString,
+		Optional:    true,
+		Computed:    true,
+		Description: "Proxy ID",
+	},
+}
+
+var schemaProtoTrigger map[string]*schema.Schema
+
+func init() {
+	schemaProtoTrigger = map[string]*schema.Schema{
+		"ruleid": {
+			Type:        schema.TypeString,
+			Optional:    true,
+			ForceNew:    true,
+			Description: "LLD Rule ID (required for Zabbix < 7.0, optional for Zabbix 7.0+)",
+		},
+		"name": {
+			Type:         schema.TypeString,
+			Required:     true,
+			ValidateFunc: validation.StringIsNotWhiteSpace,
+			Description:  "Trigger name",
+		},
+		"expression": {
+			Type:         schema.TypeString,
+			ValidateFunc: validation.StringIsNotWhiteSpace,
+			Description:  "Trigger Expression",
+			Required:     true,
+		},
+		"comments": {
+			Type:        schema.TypeString,
+			Description: "Trigger comments",
+			Optional:    true,
+		},
+		"priority": {
+			Type:         schema.TypeString,
+			Optional:     true,
+			Description:  "Trigger Priority level, one of: " + strings.Join(TRIGGER_PRIORITY_ARR, ", "),
+			ValidateFunc: validation.StringInSlice(TRIGGER_PRIORITY_ARR, false),
+			Default:      "not_classified",
+		},
+		"enabled": {
+			Type:        schema.TypeBool,
+			Optional:    true,
+			Default:     true,
+			Description: "Enable this trigger",
+		},
+		"multiple": {
+			Type:        schema.TypeBool,
+			Optional:    true,
+			Default:     false,
+			Description: "generate multiple events",
+		},
+		"url": {
+			Type:         schema.TypeString,
+			Optional:     true,
+			Description:  "link to url relevent to trigger",
+			ValidateFunc: validation.IsURLWithHTTPorHTTPS,
+		},
+		"recovery_none": {
+			Type:        schema.TypeBool,
+			Optional:    true,
+			Default:     false,
+			Description: "set recovery mode to none",
+		},
+		"recovery_expression": {
+			Type:        schema.TypeString,
+			Optional:    true,
+			Description: "use recovery expression (recovery_none must not be true)",
+		},
+		"correlation_tag": {
+			Type:        schema.TypeString,
+			Description: "correlation tag",
+			Optional:    true,
+		},
+		"manual_close": {
+			Type:        schema.TypeBool,
+			Optional:    true,
+			Default:     false,
+			Description: "Manual resolution",
+		},
+		"dependencies": {
+			Type:     schema.TypeSet,
+			Optional: true,
+			Elem: &schema.Schema{
+				Type:         schema.TypeString,
+				ValidateFunc: validation.StringMatch(regexp.MustCompile("^[0-9]+$"), "must be a numeric string"),
+			},
+			Description: "Trigger Dependencies",
+		},
+		"tag": {
+			Type:     schema.TypeSet,
+			Optional: true,
+			Elem: &schema.Resource{
+				Schema: map[string]*schema.Schema{
+					"key": {
+						Type:         schema.TypeString,
+						Required:     true,
+						ValidateFunc: validation.StringIsNotWhiteSpace,
+						Description:  "Tag Key",
+					},
+					"value": {
+						Type:        schema.TypeString,
+						Optional:    true,
+						Description: "Tag Value",
+					},
+				},
+			},
+		},
+	}
 }
 
 // terraform resource handler for triggers
@@ -150,12 +261,12 @@ func resourceProtoTrigger() *schema.Resource {
 			State: schema.ImportStatePassthrough,
 		},
 
-		Schema: schemaTrigger,
+		Schema: schemaProtoTrigger,
 	}
 }
 
 // Build Trigger struct for create/modify
-func buildTriggerObject(d *schema.ResourceData) zabbix.Trigger {
+func buildTriggerObject(d *schema.ResourceData, m interface{}, prototype bool) zabbix.Trigger {
 	item := zabbix.Trigger{
 		Description:        d.Get("name").(string),
 		Expression:         d.Get("expression").(string),
@@ -169,6 +280,18 @@ func buildTriggerObject(d *schema.ResourceData) zabbix.Trigger {
 		CorrelationMode:    0,
 		CorrelationTag:     "",
 		ManualClose:        0,
+	}
+
+	if prototype {
+		api := m.(*zabbix.API)
+		if api.Config.Version < 70000 {
+			item.RuleID = d.Get("ruleid").(string)
+		}
+	} else {
+		proxyId := d.Get("proxyid").(string)
+		if proxyId != "" && proxyId != "0" {
+			item.ProxyID = proxyId
+		}
 	}
 
 	if !d.Get("enabled").(bool) {
@@ -205,7 +328,7 @@ func resourceTriggerCreate(prototype bool) schema.CreateFunc {
 	return func(d *schema.ResourceData, m interface{}) error {
 		api := m.(*zabbix.API)
 
-		item := buildTriggerObject(d)
+		item := buildTriggerObject(d, m, prototype)
 
 		items := []zabbix.Trigger{item}
 
@@ -309,7 +432,7 @@ func resourceTriggerUpdate(prototype bool) schema.UpdateFunc {
 	return func(d *schema.ResourceData, m interface{}) error {
 		api := m.(*zabbix.API)
 
-		item := buildTriggerObject(d)
+		item := buildTriggerObject(d, m, prototype)
 
 		item.TriggerID = d.Id()
 

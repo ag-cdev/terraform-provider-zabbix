@@ -221,7 +221,7 @@ func protoItemGetReadWrapper(r ItemHandler) schema.ReadFunc {
 func resourceItemCreate(d *schema.ResourceData, m interface{}, c ItemHandler, r ItemHandler, prototype bool) error {
 	api := m.(*zabbix.API)
 
-	item := buildItemObject(d, api, prototype)
+	item := buildItemObject(d, api, prototype, true, true)
 
 	// run custom function
 	c(d, m, item)
@@ -253,7 +253,7 @@ func resourceItemCreate(d *schema.ResourceData, m interface{}, c ItemHandler, r 
 func resourceItemUpdate(d *schema.ResourceData, m interface{}, c ItemHandler, r ItemHandler, prototype bool) error {
 	api := m.(*zabbix.API)
 
-	item := buildItemObject(d, api, prototype)
+	item := buildItemObject(d, api, prototype, false, false)
 	item.ItemID = d.Id()
 
 	// run custom function
@@ -342,14 +342,21 @@ func resourceItemRead(d *schema.ResourceData, m interface{}, r ItemHandler, prot
 }
 
 // Build the base Item Object
-func buildItemObject(d *schema.ResourceData, api *zabbix.API, prototype bool) *zabbix.Item {
+// setHostID controls whether to include hostid - for Zabbix 7+ SNMP items, hostid should not
+// be sent during UPDATE operations
+// setRuleID controls whether to include ruleid - for Zabbix 7+ item prototypes, ruleid should not
+// be sent during UPDATE operations
+func buildItemObject(d *schema.ResourceData, api *zabbix.API, prototype bool, setHostID bool, setRuleID bool) *zabbix.Item {
 	item := zabbix.Item{
 		Key:       d.Get("key").(string),
-		HostID:    d.Get("hostid").(string),
 		Name:      d.Get("name").(string),
 		History:   d.Get("history").(string),
 		Trends:    d.Get("trends").(string),
 		ValueType: ITEM_VALUE_TYPES[d.Get("valuetype").(string)],
+	}
+
+	if setHostID {
+		item.HostID = d.Get("hostid").(string)
 	}
 	item.Preprocessors = itemGeneratePreprocessors(d)
 	apps := d.Get("applications").(*schema.Set).List()
@@ -373,7 +380,7 @@ func buildItemObject(d *schema.ResourceData, api *zabbix.API, prototype bool) *z
 		d.Set("trends", item.Trends)
 	}
 
-	if prototype {
+	if prototype && setRuleID {
 		item.RuleID = d.Get("ruleid").(string)
 	}
 

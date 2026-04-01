@@ -280,16 +280,14 @@ var hostSchemaBase = map[string]*schema.Schema{
 				"snmp_community": &schema.Schema{
 					Type:         schema.TypeString,
 					Optional:     true,
-					Description:  "HSNMP Community (v1/v2 only)",
+					Description:  "SNMP Community (v1/v2 only)",
 					ValidateFunc: validation.StringIsNotWhiteSpace,
-					Default:      "{$SNMP_COMMUNITY}",
 				},
 				"snmp3_authpassphrase": &schema.Schema{
 					Type:         schema.TypeString,
 					Optional:     true,
 					Description:  "Authentication Passphrase (v3 only)",
 					ValidateFunc: validation.StringIsNotWhiteSpace,
-					Default:      "{$SNMP3_AUTHPASSPHRASE}",
 				},
 				"snmp3_authprotocol": &schema.Schema{
 					Type:         schema.TypeString,
@@ -299,18 +297,15 @@ var hostSchemaBase = map[string]*schema.Schema{
 					Default:      "sha",
 				},
 				"snmp3_contextname": &schema.Schema{
-					Type:         schema.TypeString,
-					Optional:     true,
-					Description:  "Context Name (v3 only)",
-					ValidateFunc: validation.StringIsNotWhiteSpace,
-					Default:      "{$SNMP3_CONTEXTNAME}",
+					Type:        schema.TypeString,
+					Optional:    true,
+					Description: "Context Name (v3 only)",
 				},
 				"snmp3_privpassphrase": &schema.Schema{
 					Type:         schema.TypeString,
 					Optional:     true,
 					Description:  "Priv Passphrase (v3 only)",
 					ValidateFunc: validation.StringIsNotWhiteSpace,
-					Default:      "{$SNMP3_PRIVPASSPHRASE}",
 				},
 				"snmp3_privprotocol": &schema.Schema{
 					Type:         schema.TypeString,
